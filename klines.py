@@ -1,5 +1,8 @@
+import time
+
 from database import Database
 from kline import Kline
+from client import Client
 
 
 class Klines():
@@ -43,3 +46,16 @@ class Klines():
         questions_marks = ', '.join('?' * len(fields.keys()))
         self.database.execute(
             f'insert into klines ({fields_names}) values ({questions_marks})', fields)
+
+    def query_binance(self, symbol):
+        client = Client()
+        interval = Client.KLINE_INTERVAL_1MINUTE
+        empezar = 0
+        # desfase tolerable máximo 5 minutos
+        while empezar / 1000 < time.time() - 300:
+            salida = client.get_klines(
+                symbol=symbol, interval=interval, startTime=empezar, limit=1000)
+            for item in salida:
+                kline = Kline(symbol, item)
+                self.store(kline)
+                empezar = kline.close_time
