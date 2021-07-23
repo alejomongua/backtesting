@@ -1,0 +1,9 @@
+**/config.json
+binance/simbolos.json
+**.pyc
+**.log
+venv/*
+**/__pycache__/*
+**.sqlite3
+**.tar.gz
+**/old/*
