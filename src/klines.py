@@ -15,21 +15,25 @@ class Klines():
 
     def __init__(self, symbol):
         self.symbol = symbol
-        self.next_candle = 0
+        self.last_candle_index = 0
         self.database = Database()
 
-    def get_data_from_api(self):
+    def fill_database_from_api(self):
         # Check if database exists
-        if not os.path.exists(DATABASE_NAME):
-            self.database.create_model(Kline)
-            last_time = 0
-        else:
+        def get_initial_last_time():
+            if not os.path.exists(DATABASE_NAME):
+                self.database.create_model(Kline)
+                return 0
             session = self.database.get_session()
             kline = session.query(Kline)\
                 .order_by(desc(Kline.id))\
                 .filter(Kline.symbol == self.symbol)\
                 .first()
-            last_time = int(datetime.timestamp(kline.close_time) * 1000)
+            if kline is None:
+                return 0
+            return int(datetime.timestamp(kline.close_time) * 1000)
+
+        last_time = get_initial_last_time()
         while (last_time / 1000) < time.time() - TOLERATED_TIME_DELAY:
             data = client.get_klines(symbol=self.symbol,
                                      interval='1m',
@@ -41,11 +45,33 @@ class Klines():
             last_time = int(datetime.timestamp(last_kline.close_time) * 1000)
             print(f'Stored until {last_kline.close_time.strftime("%F %r")}')
 
-    def retrieve_next_candle(self):
+    def get_next_from_database(self):
         session = self.database.get_session()
         kline = session.query(Kline)\
             .order_by(Kline.id)\
-            .filter(Kline.id > self.next_candle, Kline.symbol == self.symbol)\
+            .filter(Kline.id > self.last_candle_index, Kline.symbol == self.symbol)\
             .first()
-        self.next_candle = kline.id
+        if kline is None:
+            return None
+        self.last_candle_index = kline.id
+        return kline
+
+    def get_first_candles(self, quantity):
+        klines = self.database\
+            .get_session()\
+            .query(Kline)\
+            .order_by(Kline.id)\
+            .limit(quantity)
+        self.last_candle_index = klines[-1].id
+        return klines
+
+    # Iterator interface
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        kline = self.get_next_from_database()
+        if kline is None:
+            raise StopIteration
         return kline
